@@ -1,0 +1,1013 @@
+---
+title: "Clustering in Medical Data"
+author: "Mihalis Galanakis"
+date: "21/2/2022"
+output: word_document
+---
+**Objective**
+```{r}
+# The data in the folder named data.txt refer to counts from different variables in a population of women, aiming to gain useful insights and explore different methods of clustering.
+```  
+**Read in the data**  
+```{r}
+data <- read.table('C:/Users/mihal/OneDrive/data.txt',sep=",")
+# Statistical Learning Project
+
+# The following Dataset involves predicting the onset of diabetes within 5 years in a women population given medical details.
+# It is a binary (2-class) classification problem. The number of observations for each class is not balanced. 
+# There are 768 observations with 8 input variables and 1 output variable. Missing values are believed to be encoded with zero values.
+# The variable names are as follows:
+
+# Number of times pregnant.
+# Plasma glucose concentration a 2 hours in an oral glucose tolerance test.
+# Diastolic blood pressure (mm Hg).
+# Triceps skinfold thickness (mm).
+# 2-Hour serum insulin (mu U/ml).
+# Body mass index (weight in kg/(height in m)^2).
+# Diabetes pedigree function.
+# Age (years).
+# Class variable (0 or 1).
+```  
+**Descriptive statistics**   
+```{r}
+str(data)
+dim(data)
+summary(data)
+colnames(data) <- c("t.pregnant","plasma","bl.press","tr.thick","serum.ins","bmi","diab","age","class")
+head(data,5)
+tail(data,5)
+
+class <- data$class
+t.pregnant <- data$t.pregnant
+
+
+expl_data <- data[,2:8] 
+# We assume that the zeros in the variable times.pregnant are not missing, hence we don't replace zeros with "NA"
+
+head(expl_data,10)
+expl_data[expl_data==0] <- NA 
+# Replace the zeros with "NA"
+
+df <- data.frame(t.pregnant,expl_data,class) 
+# Create the transformed dataframe
+head(df,5) 
+# View the first 5 obs of the df
+tail(df,5) 
+# View the last 5 obs of the df
+dim(df)
+```  
+**Since we are not interested in using an imputed dataset we omit the missing values**   
+```{r}
+newdf <- na.omit(df)
+# Create the final dataframe that doesn't include missing values!
+str(newdf)
+
+var(newdf)
+# Check the variances (diagonal elements) of the variables in the dataframe newdf
+
+apply(newdf,2, var)
+# Same as above
+
+n.class <- newdf$class
+table(n.class)
+n.class[n.class==0] <- 2
+# Transformation needed for the plots later on
+
+table(n.class)
+# 1 corresponds to the women that will develop diabetes, 2 refers to the women that won't develop diabetes!
+
+
+library(reshape2)
+library(ggplot2)
+df1 <- melt(newdf[,-9])
+ggplot(data = df1, aes(x = value)) + 
+  stat_density() + 
+  facet_wrap(~variable, scales = "free")
+# Small multiple chart
+
+df2 <- log(newdf+1)
+new_df2 <- melt(df2[,-9])
+ggplot(data = new_df2, aes(x = value)) + 
+  stat_density() + 
+  facet_wrap(~variable, scales = "free")
+# Small multiple chart of the transformed data
+
+
+
+df3 <- sqrt(newdf[,-9])
+head(df3)
+new_df3 <- data.frame(df3,n.class)
+head(new_df3)
+
+
+n_df3 <- melt(new_df3[,-9])
+ggplot(data = n_df3, aes(x = value)) + 
+  stat_density() + 
+  facet_wrap(~variable, scales = "free")
+# Small multiple chart of the transformed data
+
+
+# We observe that when using the square root transformation the variable's distributions are slightly improved as 
+# regards normality hence we stick with this transformation! (the transformed dataset we will work with is called new_df3)
+
+cor(new_df3[,-9])
+# Correlations of the transformed dataset
+
+library(Hmisc)
+mat <- as.matrix(new_df3)
+newmat <- mat[,1:8]
+rcorr(newmat) 
+
+```
+**Implementation of Hierarchical clustering using different linkages with proximity measure the euclidian distance**  
+```{r}
+d1 <- dist(scale(new_df3[,-9]), method = "euclidian") 
+# Scaled dissimilarity matrix using as distance the euclidian one
+head(d1)
+
+library(stats)
+library(cluster)
+
+# Hierarchical method, different linkage methods
+fit1.s <- hclust(d1, method = "single")
+fit1.c <- hclust(d1, method = "complete")
+fit1.a <- hclust(d1, method = "average")
+fit1.d <- hclust(d1,method="ward.D")
+fit1.d2 <- hclust(d1,method="ward.D2")
+fit1.m <- hclust(d1,method="mcquitty")
+fit1.me <- hclust(d1,method="median")
+fit1.centr <- hclust(d1,method="centroid")  
+```  
+**Let us plot the resulting dendrograms**  
+```{r}
+plot(fit1.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number (row number)
+# Let us observe the first split! (conservative way to tell how many groups we have!)
+# We observe that the single linkage (or nearest neighbor has fallen in the trap of the chain effect! It's known
+# that nearest linkage is prone to the chain effect, yet it's useful to identify potential outliers!
+plot(fit1.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# It indicates that there are probably 3 groups, row 446 has to be checked, potential outlier!
+plot(fit1.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+# Average linkage seems to be a bit more reasonable in general, it indicates that there are 3 groups as well
+plot(fit1.d, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 3 groups (conservative approach)
+```  
+**More dentrogram plots**  
+```{r}
+# More linkage methods to check their output in order to gain some insights as regards the clusters
+plot(fit1.d2, main = "Ward's Linkage", sub = "", xlab = "", cex=.6) 
+# This method indicates that there are 4 groups! 
+plot(fit1.m, main = "Mcqitty's Linkage", sub = "", xlab = "", cex=.6)
+# Default label: the increasing number (row number)
+plot(fit1.me, main = "Median Linkage", sub = "", xlab = "", cex=.6)
+plot(fit1.centr, main = "Centroid method", sub = "", xlab = "", cex=.6)
+plot(fit1.s, main = "Single Linkage", sub = "", xlab = "", labels=new_df3[,9], cex=.6) 
+# Label is the 9th column, which refers to class (diabetes-non diabetes that have corresponding values 1,0 respectively)
+# Is there a relationship between the medical data and the class?
+# It's not compulsory to exist. We seek to cluster the medical data. Provided we manage to cluster them, that should 
+# mean that medical data have somehow alike composition, yet that's not of top importance
+plot(fit1.c, main = "Complete Linkage", sub = "", xlab = "", labels=new_df3[,9], cex=.6)
+plot(fit1.a, main = "Average Linkage", sub = "", xlab = "", labels=new_df3[,9], cex=.6)
+plot(fit1.d2, main = "Ward's method", sub = "", xlab = "", labels=new_df3[,9], cex=.6)
+# We should be aware of the fact that Ward's linkage may impose equal size to clusters as in our case
+rect.hclust(fit1.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+```  
+**Implementation of Hierarchical clustering using different linkages with proximity measure the manhattan distance**  
+```{r}
+d2 <- dist(scale(new_df3[,-9]), method = "manhattan") 
+# Scaled dissimilarity matrix, now with manhattan distance
+# Does there change something????
+
+# Hierarchical method, different methods
+fit2.s <- hclust(d2, method = "single")
+fit2.c <- hclust(d2, method = "complete")
+fit2.a <- hclust(d2, method = "average")
+fit2.d <-hclust(d2, method="ward.D")
+fit2.d2 <-hclust(d2, method="ward.D2")
+
+# Plot the resulting dendrograms
+plot(fit2.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number
+plot(fit2.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 4 groups
+plot(fit2.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+plot(fit2.d2, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 3 groups
+rect.hclust(fit2.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+
+
+cluster.d2 <- cutree(fit2.d2,4)
+# Split the tree in 4 branches!
+cluster.d2[1:10] 
+# Gives the cluster membership for the first 10 observations of the dataset.
+plot(fit2.d2, main = "Ward's method/Class", sub = "", xlab = "",labels=new_df3[,9], cex=.6)
+# We observe  3 clusters probably
+plot(fit2.d2, main = "Ward's method/clusters", sub = "", xlab = "", labels=cluster.d2, cex=.6)
+# We observe 3 clusters probably
+
+table(cluster.d2, new_df3[,9]) 
+# What is the agreement of the diabetes-non diabetes?? Reminder: 1 refers to diabetes development, 2 refers to the women that won't develop diabetes
+# Non-diabetes women have been split in 4 groups. 109 in the first cluster, 76 in the second cluster, 40 in the third
+# cluster, 37 in the fourth cluster.
+# Women with diabetes have been split in 4 groups. 4 in the first cluster, 41 in the second cluster, 46 in the third
+# cluster and 39 in the fourth cluster.
+# Contingency table!
+# Possible outliers cause the problem of groups merging one another (or the number of groups is not the best!)
+
+cbind(new_df3[1:10,],cluster.d2[1:10])
+# Each observation , in which cluster it belongs
+
+# Let us check if the clusters we created make sense
+groups <- as.factor(cluster.d2)
+
+# Let us observe their common characteristics with respect to the variables 1:8
+boxplot(new_df3[,1]~groups, col=rainbow(4))
+boxplot(new_df3[,2]~groups, col=rainbow(4))
+boxplot(new_df3[,3]~groups, col=rainbow(4))
+boxplot(new_df3[,4]~groups, col=rainbow(4))
+boxplot(new_df3[,5]~groups, col=rainbow(4))
+boxplot(new_df3[,6]~groups, col=rainbow(4))
+boxplot(new_df3[,7]~groups, col=rainbow(4))
+boxplot(new_df3[,8]~groups, col=rainbow(4))
+# On basis of the original variables we observe that the groups do not differ!
+# Should we have decided about the groups, by creating the multiple boxplots we can gather the range of each group for
+# each variable (so we can tell their common characteristics!)
+```  
+**Implementation of Hierarchical clustering using different linkages with proximity measure the maximum distance**  
+```{r}
+d3 <- dist(scale(new_df3[,-9]), method = "maximum") 
+# Scaled dissimilarity matrix, now with manhattan distance
+# Does there change something????
+
+# Hierarchical method, different methods
+fit3.s <- hclust(d3, method = "single")
+fit3.c <- hclust(d3, method = "complete")
+fit3.a <- hclust(d3, method = "average")
+fit3.d <- hclust(d3, method="ward.D")
+fit3.d2 <- hclust(d3, method="ward.D2")
+```  
+**Let us plot the resulting dendrograms**  
+```{r}
+# Plot the resulting dendrograms
+plot(fit3.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number
+plot(fit3.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are probably 5 groups (2 singletons!)
+plot(fit3.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+plot(fit3.d2, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 3 groups
+rect.hclust(fit3.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+
+cluster.d3 <- cutree(fit3.d2,3)
+# Split the tree in 3 branches now
+cluster.d3[1:10] 
+# Gives the cluster membership for the first 10 observations of the dataset.
+plot(fit3.d2, main = "Ward's method/Class", sub = "", xlab = "",labels=new_df3[,9], cex=.6)
+# We observe 3 clusters probably (conservative approach)
+plot(fit3.d2, main = "Ward's method/clusters", sub = "", xlab = "", labels=cluster.d3, cex=.6)
+# We observe 3 clusters probably 
+table(cluster.d3, new_df3[,9]) 
+# What is the agreement of the diabetes-non diabetes??
+# Non-diabetes women have been split in 3 groups. 127 in the first cluster, 90 in the second cluster, 45 in the third cluster
+# Women with diabetes have been split in 3 groups. 19 in the first cluster, 90 in the second cluster, 21 in the third cluster
+# Contingency table!
+# Possible outliers cause the problem of groups merging one another (or there's a better partition for the number of groups)
+
+
+cbind(new_df3[1:10,],cluster.d3[1:10])
+# Each observation , in which cluster it belongs
+
+# Let us check if the clusters we created make sense
+groups3 <- as.factor(cluster.d3)
+
+# Let us observe their common characteristics with respect to the variables 1:8
+boxplot(new_df3[,1]~groups3, col=rainbow(4))
+boxplot(new_df3[,2]~groups3, col=rainbow(4))
+boxplot(new_df3[,3]~groups3, col=rainbow(4))
+boxplot(new_df3[,4]~groups3, col=rainbow(4))
+boxplot(new_df3[,5]~groups3, col=rainbow(4))
+boxplot(new_df3[,6]~groups3, col=rainbow(4))
+boxplot(new_df3[,7]~groups3, col=rainbow(4))
+boxplot(new_df3[,8]~groups3, col=rainbow(4))
+# Overall, on basis of the original variables we observe that the groups do not differ!
+```  
+**Principal Component Analysis**  
+```{r}
+# Creating PCs for two reasons:
+# 1) Visualization of the groups on the PCs
+# 2) We might prefer to work with the PCs instead of the initial data!
+set.pr <- princomp(scale(new_df3[, -9])) 
+# Exclude the labels, which are in the 9th column
+
+summary(set.pr)
+# The 1st PC explains the 31.9% of the total variability
+# The first 2 PCs explain the 51.5% of the total variability
+# The first 3 PCs explain the 66% of the total variability
+# The first 4 PCs explain the 78.3% of the total variability
+# We observe that the standard deviatons with value more than 1, are the first 3 ones (the fourth is valued at 0.987 
+# almost 1,hence we have to take that into consideration!)
+
+names(set.pr)
+
+boxplot(set.pr$scores[,1]~groups, col=rainbow(4)) 
+# We observe that group 1 differs from the rest but groups 2,3,4 do not differ between themselves
+boxplot(set.pr$scores[,2]~groups, col=rainbow(4))
+# We observe that groups 2,3,4 differ between themselves
+boxplot(set.pr$scores[,3]~groups, col=rainbow(4))
+# We observe that groups do not differ in the case of the 3rd PC
+boxplot(set.pr$scores[,4]~groups, col=rainbow(4))
+# We observe that groups do not differ in the case of the 4th PC
+# We are okay with the first 2 PCs!
+# On the negative point of view, the first 2 PCs explain the 51.5% of the total variability
+
+
+
+
+# Visualize the result of a clustering technique using PCs
+# Initially we couldn't plot the data as the dimension was 8
+# Now that's feasible due to using PCs!
+plot(set.pr$scores[,1], set.pr$scores[,2], main ="Ward’s", xlab="1st PC", ylab="2nd PC",  type='n')
+text(set.pr$scores[,1], set.pr$scores[,2], xlab="1st PC", ylab="2nd PC", label=cluster.d2, col=cluster.d2)
+# Plot of the 51.5% of the total variability that is expressed by the first 2 PCs
+# We observe that there is overlap, maybe the groups we have taken are not the best possible!
+# The partition of group 2 from 4 does make sense, as well as the partition of group 1 from 2 (or group 1 from 4). 
+# However there's overlap between groups 3 and 4, fact that indicates that this partitions does not seem to make much sense!
+# Removing outliers is the next step to be taken in order to make improvements!
+
+
+
+plot(set.pr$scores[,1], set.pr$scores[,2], main ="Ward's", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr$scores[,1], set.pr$scores[,2], xlab="1st PC", ylab="2nd PC",  label=cluster.d3, col=cluster.d3)
+# Different label now!
+
+plot(set.pr$scores[,1], set.pr$scores[,2], main ="Class", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr$scores[,1], set.pr$scores[,2], xlab="1st PC", ylab="2nd PC",  label=new_df3[,9], col=new_df3[,9])
+# Labels: The class! ( 1 refers to the women that will develop diabetes, 2 refer to the women that won't develop diabetes)
+# We observe that there's not much agreement between the results of Wards and Class on this case either!
+
+
+screeplot(set.pr,type="lines")
+# The screeplot indicates to use the first 2 PCs as the greatest angle is located between the first and the second component
+
+biplot(set.pr, choices=c(1,2), xlabs=new_df3[,9], cex=.6)
+# Biplot offers useful insights about the variables!
+
+# In order to spot on the possible outliers!
+plot(set.pr$scores[,1], set.pr$scores[,2], main ="Class", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr$scores[,1], set.pr$scores[,2], xlab="1st PC", ylab="2nd PC")
+# Quite handy
+
+
+library(ggbiplot)
+g <- ggbiplot(set.pr, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d2), ellipse = TRUE, 
+ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g <- g+geom_point(aes(colour=groups,shape=groups),size=1.3) 
+g <- g+scale_color_discrete(name = 'groups')
+g
+# We observe that there is too much overlap between groups 3 and 4!
+
+
+g1 <- ggbiplot(set.pr, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d2), ellipse = TRUE, 
+ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g1 <- g1+geom_text(aes(colour=groups, label=new_df3[,9]),size=2) 
+g1 <- g1+scale_color_discrete(name = 'groups')
+g1
+# Same conclusions as before
+
+g2 <- ggbiplot(set.pr, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d2), ellipse = TRUE, 
+var.axes=FALSE, varname.size = 4, alpha=0)
+g2 <- g2+geom_text(aes(colour=groups, label=new_df3[,9]),size=2) 
+g2 <- g2+scale_color_discrete(name = 'groups')
+g2
+# Same conclusions as before
+```  
+**Removing outliers**  
+```{r}
+# Dig into the outliers
+new_df3[226,]
+# It's line 446 which was indicated before in the single linkage method as an outlier!
+# We shall remove this line and try again the clustering!
+new_df4 <- new_df3[-226,]
+# New dataset to work with!
+```  
+**Implementation of Hierarchical clustering using different linkages with proximity measure the euclidian distance on the new dataset now**  
+```{r}
+d4 <- dist(scale(new_df4[,-9]), method = "euclidian") 
+# Scaled dissimilarity matrix using as distance the euclidian one
+head(d4)
+
+# Hierarchical method, different linkage methods
+fit4.s <- hclust(d4, method = "single")
+fit4.c <- hclust(d4, method = "complete")
+fit4.a <- hclust(d4, method = "average")
+fit4.d <- hclust(d4, method="ward.D")
+fit4.d2 <- hclust(d4, method="ward.D2")
+```  
+**Let us plot the resulting dendrograms** 
+```{r}
+# Let us plot the resulting dendrograms
+plot(fit4.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number (row number)
+# Let us observe the first split! (conservative way to tell how many groups we have!)
+# We observe that the single linkage (or nearest neighbor has fallen in the trap of the chain effect! It's known
+# that nearest linkage is prone to the chain effect, yet it's useful to identify potential outliers!
+plot(fit4.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# It indicates that there are probably 3 groups, row 5 has to be checked, potential outlier!(or singleton)
+plot(fit4.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+# Average linkage seems to be a bit more reasonable in general
+plot(fit4.d, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 3 groups (conservative approach)
+# Row 5 has to be checked!
+```  
+**More dendrogram plots**  
+```{r}
+plot(fit4.s, main = "Single Linkage", sub = "", xlab = "", labels=new_df4[,9], cex=.6) 
+# Label is the 9th column, which refers to class (diabetes-non diabetes that have corresponding values 1,2 respectively)
+plot(fit4.c, main = "Complete Linkage", sub = "", xlab = "", labels=new_df4[,9], cex=.6)
+plot(fit4.a, main = "Average Linkage", sub = "", xlab = "", labels=new_df4[,9], cex=.6)
+plot(fit4.d2, main = "Ward's method", sub = "", xlab = "", labels=new_df4[,9], cex=.6)
+# We should be aware of the fact that Ward's linkage may impose equal size to clusters as in our case.
+rect.hclust(fit4.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+
+cluster.d4 <- cutree(fit4.d2,3)
+# Split the tree in 3 branches
+cluster.d4[1:10]
+# Gives the cluster membership for the first 10 observations of the dataset.
+par(mfrow=c(1,1))
+plot(fit4.d2, main = "Ward's method/Class", sub = "", xlab = "",labels=new_df4[,9], cex=.6)
+# We observe  3 clusters probably
+plot(fit4.d2, main = "Ward's method/clusters", sub = "", xlab = "", labels=cluster.d4, cex=.6)
+# We observe 3 clusters probably
+table(cluster.d4, new_df4[,9]) 
+# What is the agreement of the diabetes-non diabetes?? (Reminder: 1 refers to women developing diabetes, 2 refers to non development of diabetes!)
+# Non-diabetes women have been split in 3 groups. 206 in the first cluster, 23 in the second cluster, 33 in the third cluster
+# Women with diabetes have been split in 3 groups. 48 in the first cluster, 39 in the second cluster, 42 in the third cluster
+# Contingency table!
+
+# Let us check if the clusters we created make sense
+groups4 <- as.factor(cluster.d4)
+
+# Let us observe their common characteristics with respect to the variables 1:8
+boxplot(new_df4[,1]~groups4, col=rainbow(4))
+boxplot(new_df4[,2]~groups4, col=rainbow(4))
+boxplot(new_df4[,3]~groups4, col=rainbow(4))
+boxplot(new_df4[,4]~groups4, col=rainbow(4))
+boxplot(new_df4[,5]~groups4, col=rainbow(4))
+boxplot(new_df4[,6]~groups4, col=rainbow(4))
+boxplot(new_df4[,7]~groups4, col=rainbow(4))
+boxplot(new_df4[,8]~groups4, col=rainbow(4))
+# On basis of the original variables we observe that the groups do not differ!
+```  
+**PCA on the new dataset now**  
+```{r}
+# Creating PCs once again
+set.pr4 <- princomp(scale(new_df4[, -9])) 
+# Exclude the labels, which are in the 9th column 
+summary(set.pr4)
+# The 1st PC explains the 32% of the total variability
+# The first 2 PCs explain the 51.4% of the total variability
+# The first 3 PCs explain the 66% of the total variability
+# The first 4 PCs explain the 78.3% of the total variability
+# We observe that the standard deviatons with value more than 1, are the first 3 ones (the fourth is valued at 0.988 
+# almost 1,hence we have to take that into consideration!)
+
+
+boxplot(set.pr4$scores[,1]~groups4, col=rainbow(4)) 
+# We observe that group 1 differs from  groups 2,3
+boxplot(set.pr4$scores[,2]~groups4, col=rainbow(4))
+# We observe that group 3 differs from the rest
+boxplot(set.pr4$scores[,3]~groups4, col=rainbow(4))
+# We observe that groups do not differ in the case of the 3rd PC
+boxplot(set.pr4$scores[,4]~groups4, col=rainbow(4))
+# We observe that groups do not differ in the case of the 4th PC
+# The first 2 PCs explain the 51.4% of the total variability
+
+
+# Visualize the result of a clustering technique using PCs
+plot(set.pr4$scores[,1], set.pr4$scores[,2], main ="Ward’s", xlab="1st PC", ylab="2nd PC",  type='n')
+text(set.pr4$scores[,1], set.pr4$scores[,2], xlab="1st PC", ylab="2nd PC", label=cluster.d4, col=cluster.d4)
+# Plot of the 51.4% of the total variability that is expressed by the first 2 PCs
+# We observe that the situation is definately improved in comparison with the 4 groups. 
+# The overlap, is not as much as it was before!
+# Removing more outliers is the next step to be taken in order to make improvements!
+
+
+plot(set.pr4$scores[,1], set.pr4$scores[,2], main ="Class", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr4$scores[,1], set.pr4$scores[,2], xlab="1st PC", ylab="2nd PC",  label=new_df4[,9], col=new_df4[,9])
+# Labels: The class! ( 1 refers to the women that will develop diabetes, 2 refer to the women that won't develop diabetes)
+# We observe that there's not much agreement between the results of Wards and Class on this case either!
+
+
+screeplot(set.pr4,type="lines")
+# The screeplot indicates to use the first 2 PC's as the greatest angle is located between the first and the second component
+
+biplot(set.pr4, choices=c(1,2), xlabs=new_df4[,9], cex=.6)
+# Useful for interpretation! Provides insights about the loadings of each variable, as well as it aids in detecting outliers!
+
+
+g4 <- ggbiplot(set.pr4, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d4), ellipse = TRUE, 
+ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g4 <- g4+geom_point(aes(colour=groups4,shape=groups4),size=1.3) 
+g4 <- g4+scale_color_discrete(name = 'groups')
+g4
+# We observe a much better partitioning than before when we had 3 groups!
+# Let us try to make things even better
+```  
+**Removing outliers**
+```{r}
+# Dig into the outliers of the dataset new_df4, which is the last one we worked with
+new_df4[2,]
+# It's line 5 which was indicated before in the single linkage method as an outlier!
+# We shall remove this line and try again the clustering!
+new_df5 <- new_df4[-2,]
+# Creating the new dataset to work with!
+```  
+**Implementation of Hierarchical clustering using different linkages with proximity measure the euclidian distance on the new dataset**  
+```{r}
+d5 <- dist(scale(new_df5[,-9]), method = "euclidian") 
+# Scaled dissimilarity matrix using as distance the euclidian one
+head(d5)
+
+# Hierarchical method, different linkage methods
+fit5.s <- hclust(d5, method = "single")
+fit5.c <- hclust(d5, method = "complete")
+fit5.a <- hclust(d5, method = "average")
+fit5.d <- hclust(d5, method="ward.D")
+fit5.d2 <- hclust(d5, method="ward.D2")
+```  
+**Let us plot the resulting dendrograms**  
+```{r}
+plot(fit5.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number (row number)
+# Let us observe the first split! (conservative way to tell how many groups we have!)
+# We observe that the single linkage (or nearest neighbor has fallen in the trap of the chain effect! It's known
+# that nearest linkage is prone to the chain effect, however it's useful to identify potential outliers!
+plot(fit5.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# It indicates that there are probably 3 groups, row 598 has to be checked, potential outlier!(or singleton)
+plot(fit5.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+# Average linkage seems to be a bit more reasonable in general
+plot(fit5.d, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 3 groups (conservative approach)
+
+
+plot(fit5.s, main = "Single Linkage", sub = "", xlab = "", labels=new_df5[,9], cex=.6) 
+# Label is the 9th column, which refers to class (diabetes-non diabetes that have corresponding values 1,2 respectively)
+plot(fit5.c, main = "Complete Linkage", sub = "", xlab = "", labels=new_df5[,9], cex=.6)
+plot(fit5.a, main = "Average Linkage", sub = "", xlab = "", labels=new_df5[,9], cex=.6)
+plot(fit5.d2, main = "Ward's method", sub = "", xlab = "", labels=new_df5[,9], cex=.6)
+# We should be aware of the fact that Ward's linkage may impose equal size to clusters as in our case
+rect.hclust(fit5.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+
+
+cluster.d5 <- cutree(fit5.d2,3)
+# Split the tree in 3 branches
+cluster.d5[1:10]
+# Gives the cluster membership for the first 10 observations of the dataset.
+plot(fit5.d2, main = "Ward's method/Class", sub = "", xlab = "",labels=new_df5[,9], cex=.6)
+# We observe  3 clusters probably (conservative approach)
+plot(fit5.d2, main = "Ward's method/clusters", sub = "", xlab = "", labels=cluster.d5, cex=.6)
+# We observe 3 clusters probably
+table(cluster.d5, new_df5[,9]) 
+# What is the agreement of the diabetes-non diabetes?? (Reminder: 1 refers to women developing diabetes, 2 refers to non development of diabetes!)
+# Non-diabetes women have been split in 3 groups. 202 in the first cluster, 44 in the second cluster, 16 in the third cluster
+# Women with diabetes have been split in 3 groups. 47 in the first cluster, 59 in the second cluster, 22 in the third cluster
+# Contigency table!
+
+# Let us check if the clusters we created make sense
+groups5 <- as.factor(cluster.d5)
+
+# Let us observe their common characteristics with respect to the variables 1:8
+boxplot(new_df5[,1]~groups5, col=rainbow(4))
+boxplot(new_df5[,2]~groups5, col=rainbow(4))
+boxplot(new_df5[,3]~groups5, col=rainbow(4))
+boxplot(new_df5[,4]~groups5, col=rainbow(4))
+boxplot(new_df5[,5]~groups5, col=rainbow(4))
+boxplot(new_df5[,6]~groups5, col=rainbow(4))
+boxplot(new_df5[,7]~groups5, col=rainbow(4))
+boxplot(new_df5[,8]~groups5, col=rainbow(4))
+# On basis of the original variables we observe that the groups do not differ!
+```  
+**PCA on the new dataset now**  
+```{r}
+set.pr5 <- princomp(scale(new_df5[, -9])) 
+# Exclude the labels, which are in the 9th column 
+summary(set.pr5)
+# The 1st PC explains the 32.1% of the total variability
+# The first 2 PCs explain the 51.4% of the total variability
+# The first 3 PCs explain the 66.1% of the total variability
+# The first 4 PCs explain the 78.3% of the total variability
+# We observe that the standard deviatons with value more than 1, are the first 3 ones (the fourth is valued at 0.985 
+# almost 1,hence we have to take that into consideration!)
+
+boxplot(set.pr5$scores[,1]~groups5, col=rainbow(4)) 
+# We observe that group 1 differs from  groups 2 and 3
+boxplot(set.pr5$scores[,2]~groups5, col=rainbow(4))
+# We observe that group 3 differs from the rest
+boxplot(set.pr5$scores[,3]~groups5, col=rainbow(4))
+# We observe that groups do not differ in the case of the 3rd PC
+boxplot(set.pr5$scores[,4]~groups5, col=rainbow(4))
+# We observe that groups do not differ in the case of the 4th PC
+# The first 2 PCs explain the 51.5% of the total variability
+
+
+# Visualize the result of a clustering technique using PCs
+plot(set.pr5$scores[,1], set.pr5$scores[,2], main ="Ward’s", xlab="1st PC", ylab="2nd PC",  type='n')
+text(set.pr5$scores[,1], set.pr5$scores[,2], xlab="1st PC", ylab="2nd PC", label=cluster.d5, col=cluster.d5)
+# Plot of the 51.5% of the total variability that is expressed by the first 2 PCs
+# We observe that the situation is definately improved in comparison with the 4 groups. 
+# The overlap, is not as much as it was before!
+# Removing more outliers is the next step to be taken in order to make improvements!
+
+
+plot(set.pr5$scores[,1], set.pr5$scores[,2], main ="Class", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr5$scores[,1], set.pr5$scores[,2], xlab="1st PC", ylab="2nd PC",  label=new_df5[,9], col=new_df5[,9])
+# Labels: The class! (1 refers to the women that will develop diabetes, 2 refer to the women that won't develop diabetes)
+# We observe that there's not much agreement between the results of Wards and Class on this case either!
+
+
+screeplot(set.pr5,type="lines")
+# The screeplot indicates to use the first 2 PC's as the greatest angle is located between the first and the second component
+
+biplot(set.pr5, choices=c(1,2), xlabs=new_df5[,9], cex=.6)
+# Useful for interpretation! Provides insights about the loadings of each variable, as well as it aids in detecting outliers!
+
+library(ggbiplot)
+g5 <- ggbiplot(set.pr5, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d5), ellipse = TRUE, 
+               ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g5 <- g5+geom_point(aes(colour=groups5,shape=groups5),size=1.3) 
+g5 <- g5+scale_color_discrete(name = 'groups')
+g5
+# We observe a better partitioning than before when we had 3 groups! The overlap has been reduced!
+# Let us try to make things even better
+```  
+**Removing outliers**  
+```{r}
+# Dig into the outliers of the dataset new_df5, which is the last one we worked with
+new_df5[306,]
+# It's line 598 which was indicated before in the single linkage method as an outlier!
+# We shall remove this line and try again the clustering!
+new_df6 <- new_df5[-306,]
+# Creating the new dataset to work with!
+```  
+**Heatmap of the correlations of our final dataset!**  
+```{r}
+library(corrplot)
+corrmatrix <- cor(new_df6)
+corrplot(corrmatrix, method = 'number')
+```  
+**Implementation of Hierarchical clustering using different linkages with proximity measure the euclidian distance on the new dataset**  
+```{r}
+d6 <- dist(scale(new_df6[,-9]), method = "euclidian") 
+# Scaled dissimilarity matrix using as distance the euclidian one
+head(d6)
+
+# Hierarchical method, different linkage methods
+fit6.s <- hclust(d6, method = "single")
+fit6.c <- hclust(d6, method = "complete")
+fit6.a <- hclust(d6, method = "average")
+fit6.d <- hclust(d6, method = "ward.D")
+fit6.d2 <- hclust(d6, method = "ward.D2")
+```  
+**Let us plot the resulting dendrograms**  
+```{r}
+plot(fit6.s, main = "Single Linkage", sub = "", xlab = "", cex=.6) 
+# Default label: the increasing number (row number)
+# Let us observe the first split! (conservative way to tell how many groups we have!)
+# We observe that the single linkage (or nearest neighbor has fallen in the trap of the chain effect! It's known
+# that nearest linkage is prone to the chain effect, however it's useful to identify potential outliers!
+plot(fit6.c, main = "Complete Linkage", sub = "", xlab = "", cex=.6)
+# It indicates that there are probably 3 groups (conservative approach)
+plot(fit6.a, main = "Average Linkage", sub = "", xlab = "", cex=.6)
+# Average linkage seems to be a bit more reasonable in general
+plot(fit6.d, main = "Ward's method", sub = "", xlab = "", cex=.6)
+# The plot indicates that there are 2 groups probably (conservative approach) , maybe 4 as well (needs more exploration!)
+
+plot(fit6.s, main = "Single Linkage", sub = "", xlab = "", labels=new_df6[,9], cex=.6) 
+# Label is the 9th column, which refers to class (diabetes-non diabetes that have corresponding values 1,2 respectively)
+plot(fit6.c, main = "Complete Linkage", sub = "", xlab = "", labels=new_df6[,9], cex=.6)
+plot(fit6.a, main = "Average Linkage", sub = "", xlab = "", labels=new_df6[,9], cex=.6)
+plot(fit6.d2, main = "Ward's method", sub = "", xlab = "", labels=new_df6[,9], cex=.6)
+# We should be aware of the fact that Ward's linkage may impose equal size to clusters as in our case
+rect.hclust(fit6.d2, 4) 
+# Split a dendrogram in 4 rectangulars
+
+cluster.d6 <- cutree(fit6.d2,3)
+# Split the tree in 3 branches
+cluster.d6[1:10]
+# Gives the cluster membership for the first 10 observations of the dataset.
+par(mfrow=c(1,1))
+plot(fit6.d2, main = "Ward's method/Class", sub = "", xlab = "",labels=new_df6[,9], cex=.6)
+# We observe  4 clusters probably (conservative approach)
+plot(fit6.d2, main = "Ward's method/clusters", sub = "", xlab = "", labels=cluster.d6, cex=.6)
+# We observe 4 clusters probably
+table(cluster.d6, new_df6[,9])
+# What is the agreement of the diabetes-non diabetes?? (Reminder: 1 refers to women developing diabetes, 2 refers to non development of diabetes!)
+# Non-diabetes women have been split in 3 groups. 165 in the first cluster, 38 in the second cluster, 58 in the third cluster
+# Women with diabetes have been split in 3 groups. 27 in the first cluster, 50 in the second cluster, 51 in the third cluster
+# Contingency table!
+
+# Let us check if the clusters we created make sense
+groups6 <- as.factor(cluster.d6)
+
+# Let us observe their common characteristics with respect to the variables 1:8
+boxplot(new_df6[,1]~groups6, col=rainbow(4))
+boxplot(new_df6[,2]~groups6, col=rainbow(4))
+boxplot(new_df6[,3]~groups6, col=rainbow(4))
+boxplot(new_df6[,4]~groups6, col=rainbow(4))
+boxplot(new_df6[,5]~groups6, col=rainbow(4))
+boxplot(new_df6[,6]~groups6, col=rainbow(4))
+boxplot(new_df6[,7]~groups6, col=rainbow(4))
+boxplot(new_df6[,8]~groups6, col=rainbow(4))
+# On basis of the original variables we observe that the groups do not differ!
+```  
+**PCA on the final dataset now**  
+```{r}
+# Creating PCs once again
+set.pr6 <- princomp(scale(new_df6[, -9])) 
+# Exclude the labels, which are in the 9th column 
+summary(set.pr6)
+# The 1st PC explains the 31.9% of the total variability
+# The first 2 PCs explain the 51.4% of the total variability
+# The first 3 PCs explain the 66% of the total variability
+# The first 4 PCs explain the 78.2% of the total variability
+# We observe that the standard deviatons with value more than 1, are the first 3 ones (the fourth is valued at 0.983 
+# almost 1,hence we have to take that into consideration!)
+
+boxplot(set.pr6$scores[,1]~groups6, col=rainbow(4)) 
+# We observe that group 1 differs from  groups 2 and 3
+boxplot(set.pr6$scores[,2]~groups6, col=rainbow(4))
+# We observe that group 2 differs from the rest
+boxplot(set.pr6$scores[,3]~groups6, col=rainbow(4))
+# We observe that groups do not differ in the case of the 3rd PC
+boxplot(set.pr6$scores[,4]~groups6, col=rainbow(4))
+# We observe that groups do not differ in the case of the 4th PC
+# The first 2 PCs explain the 51.5% of the total variability
+
+
+# Visualize the result of a clustering technique using PCs
+plot(set.pr6$scores[,1], set.pr6$scores[,2], main ="Ward’s", xlab="1st PC", ylab="2nd PC",  type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], xlab="1st PC", ylab="2nd PC", label=cluster.d6, col=cluster.d6)
+# Plot of the 51.3% of the total variability that is expressed by the first 2 PCs
+
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], main ="Class", xlab="1st PC", ylab="2nd PC", type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], xlab="1st PC", ylab="2nd PC",  label=new_df6[,9], col=new_df6[,9])
+# Labels: The class! (1 refers to the women that will develop diabetes, 2 refer to the women that won't develop diabetes)
+# We observe that there's not much agreement between the results of Wards and Class on this case either!
+
+
+screeplot(set.pr6,type="lines")
+# The screeplot indicates to use the first 2 PC's as the greatest angle is located between the first and the second component
+
+biplot(set.pr6, choices=c(1,2), xlabs=new_df6[,9], cex=.6)
+# Useful for interpretation! Provides insights about the loadings of each variable, as well as it aids in detecting outliers!
+
+library(ggbiplot)
+g6 <- ggbiplot(set.pr6, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d6), ellipse = TRUE, 
+ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g6 <- g6+geom_point(aes(colour=groups6,shape=groups6),size=1.3) 
+g6 <- g6+scale_color_discrete(name = 'groups')
+g6
+# We observe a worse partitioning than before when we had 3 groups! The overlap has been inceased so we stick with the previous dataset!
+# (before removing row 598)
+```  
+**Let us try splitting this (final) dataset in 4 clusters**  
+```{r}
+# Contigency table
+cluster.d6_v2 <- cutree(fit6.d2,4)
+# Split the tree in 4 branches
+cluster.d6_v2[1:10]
+# Gives the cluster membership for the first 10 observations of the dataset
+
+table(cluster.d6_v2, new_df6[,9])
+# What is the agreement of the diabetes-non diabetes?? (Reminder: 1 refers to women developing diabetes, 2 refers to non development of diabetes!)
+# Non-diabetes women have been split in 3 groups. 165 in the first cluster, 38 in the second cluster, 58 in the third cluster
+# Women with diabetes have been split in 3 groups. 27 in the first cluster, 50 in the second cluster, 51 in the third cluster
+groups6_v2 <- as.factor(cluster.d6_v2)
+```  
+**Creating PCs once again**  
+```{r}
+set.pr6_v2 <- princomp(scale(new_df6[, -9]))
+# Exclude the labels, which are in the 9th column 
+summary(set.pr6_v2)
+# The 1st PC explains the 31.9% of the total variability
+# The first 2 PCs explain the 51.4% of the total variability
+# The first 3 PCs explain the 66% of the total variability
+# The first 4 PCs explain the 78.2% of the total variability
+# We observe that the standard deviatons with value more than 1, are the first 3 ones (the fourth is valued at 0.983 
+# almost 1,hence we have to take that into consideration!)
+
+boxplot(set.pr6_v2$scores[,1]~groups6_v2, col=rainbow(4)) 
+# We observe that group 4 differs from the rest
+boxplot(set.pr6_v2$scores[,2]~groups6_v2, col=rainbow(4))
+# We observe that group 2 differs from the rest
+boxplot(set.pr6_v2$scores[,3]~groups6_v2, col=rainbow(4))
+# We observe that groups do not differ in the case of the 3rd PC
+boxplot(set.pr6_v2$scores[,4]~groups6_v2, col=rainbow(4))
+# We observe that groups do not differ in the case of the 4th PC
+# The first 2 PCs explain the 51.3% of the total variability
+
+
+library(ggbiplot)
+g6_v2 <- ggbiplot(set.pr6_v2, choices = c(1,2), pc.biplot = TRUE, groups = as.factor(cluster.d6_v2), ellipse = TRUE, 
+ellipse.prob = 0.85, var.axes=FALSE, varname.size = 4, alpha=0)
+g6_v2 <- g6_v2+geom_point(aes(colour=groups6_v2,shape=groups6_v2),size=1.3) 
+g6_v2 <- g6_v2+scale_color_discrete(name = 'groups')
+g6_v2
+# We observe a worse partitioning than before when we had 3 groups! The overlap has been increased so we stick with the previous dataset!
+# (before removing row 598)
+```  
+**K Means Clustering**  
+```{r}
+# Say 3 clusters is selected
+kmeans.3 <- kmeans(scale(new_df6[,-9]), centers = 3, iter.max = 25, trace = TRUE)
+names(kmeans.3)
+# Parameters that belong to object kmeans.3
+table(kmeans.3$cluster)
+# How many obs belong to each of the 3 clusters
+kmeans.3$centers
+# Mean values for each cluster
+kmeans.3$withinss
+# Sum of squares within groups
+kmeans.3$betweenss
+# Sum of square between groups
+
+# Scatterplot for the pairs of the initial variables
+pairs(new_df6[,-9], col=c(1:3)[kmeans.3$cluster])
+
+
+
+
+# Say 4 clusters is selected
+kmeans.4 <- kmeans(scale(new_df6[,-9]), centers = 4, iter.max = 25, trace = TRUE)
+names(kmeans.4)
+# Parameters that belong to object kmeans.4
+table(kmeans.4$cluster)
+# How many obs belong to each of the 4 clusters
+kmeans.4$centers
+# Mean values for each cluster
+kmeans.4$withinss
+# Sum of squares within groups
+kmeans.4$betweenss
+# Sum of square between groups
+
+
+
+
+
+# Say 2 clusters is selected
+kmeans.2 <- kmeans(scale(new_df6[,-9]), centers = 2, iter.max = 25, trace = TRUE)
+names(kmeans.2)
+# Parameters that belong to object kmeans.4
+table(kmeans.2$cluster)
+# How many obs belong to each of the 4 clusters
+kmeans.2$centers
+# Mean values for each cluster
+kmeans.2$withinss
+# Sum of squares within groups
+kmeans.2$betweenss
+# Sum of square between groups
+
+
+
+# Plots
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=kmeans.3$cluster, col=kmeans.3$cluster)
+# We observe that there is no significant overlap!
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=cluster.d6, col=cluster.d6)
+# we observe that k.means has provided a much better result compared to this partitioning!
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=new_df6[,9], col=new_df6[,9])
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=kmeans.4$cluster, col=kmeans.4$cluster)
+# We observe that k means with 4 clusters produces much worse results than the ones with 3 clusters!
+# Visible much overlap between groups 1 and 2 mostly!
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=kmeans.2$cluster, col=kmeans.2$cluster)
+# Much better partition than the one with the 4 clusters!
+```  
+**Model based method**  
+```{r}
+library(mclust)
+fit.model.based <- Mclust(scale(new_df6[,-9]))
+names(fit.model.based)
+
+plot(fit.model.based, new_df6[,-9], what = 'BIC')
+# The BIC values plotted
+print(fit.model.based)
+# Proposed model VVE (Variable-Variable-Equal) with 3 clusters!
+table(fit.model.based$classification)
+# Gives the sum of the cluster membership of the observations that belong in the final transformed dataset (new_df6)
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], main= 'Model Based', label=fit.model.based$classification, 
+col=fit.model.based$classification)
+
+
+plot(set.pr6$scores[,1], set.pr6$scores[,2], type='n')
+text(set.pr6$scores[,1], set.pr6$scores[,2], label=new_df6[,9], col=new_df6[,9])
+```  
+**Indices**  
+```{r}
+# install.packages("profdpm", repos="http://R-Forge.R-project.org")
+library(profdpm)
+
+# Indices
+pci(cluster.d6,fit.model.based$classification)
+# R stands for Rand index, FM stands for Fowlkes and Mallows index, W10 stands for Wallace 10 index, W01 stands for
+# Wallace 01 index and J stands for Jaccard index
+pci(cluster.d6,kmeans.2$cluster)
+pci(cluster.d6,kmeans.3$cluster)
+pci(cluster.d6,kmeans.4$cluster)
+```  
+**Visualizations**  
+```{r}
+library(factoextra)
+kmeans.cl = eclust(scale(new_df6[,-9]), FUNcluster = "kmeans", hc_metric = "euclidean")
+fviz_cluster(kmeans.cl, ellipse=TRUE, ellipse.type='norm')   
+
+fviz_cluster(fit.model.based, ellipse=TRUE, ellipse.type='norm')
+# Similar plot with the one for ggbiplot
+
+hclust_d2 <- eclust(scale(new_df6[,-9]), "hclust", k = 3, hc_metric = "euclidean", hc_method = "ward.D2", 
+graph = FALSE)
+fviz_cluster(hclust_d2, ellipse=TRUE, ellipse.type='norm') 
+
+
+fviz_nbclust(new_df6, kmeans , method='silhouette')
+```  
+**Partitioning Clustering**  
+```{r}
+library(cluster)
+gap_stat <- clusGap(scale(new_df6[,-9]), FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+# Visualizing the optimal value for the number of clusters ( k = 2)
+
+part1 <- pam(new_df6,k=2,metric="euclidean")
+clusplot(part1,shade=T,color=T)
+# Way too much overlap observed!
+
+part2 <- pam(new_df6,k=3,metric="euclidean")
+clusplot(part2,shade=T,color=T)
+# Definately not prefferable the clustering this way!
+```  
+**Silhouette for the different number of clusters**  
+```{r}
+sil1=silhouette(kmeans.4$cluster, dist(new_df6[,-9], "euclidean"))
+summary(sil1)
+plot(sil1)
+
+
+sil2=silhouette(kmeans.3$cluster, dist(new_df6[,-9], "euclidean"))
+summary(sil2)
+plot(sil2)
+
+
+sil3=silhouette(kmeans.2$cluster, dist(new_df6[,-9], "euclidean"))
+summary(sil3)
+plot(sil3)
+
+
+sil4=silhouette(fit.model.based$classification, dist(new_df6[,-9], "euclidean"))
+summary(sil4)
+plot(sil4)
+
+
+sil5=silhouette(cluster.d6, dist(new_df6[,-9], "euclidean"))
+summary(sil5)
+plot(sil5)
+
+
+# Determining optimal number of clusters (k)
+silhouette_score <- function(k){
+  km <- kmeans(new_df6, centers = k, nstart=25)
+  ss <- silhouette(km$cluster, dist(new_df6))
+  mean(ss[, 3])
+}
+k <- 2:10
+avg_sil <- sapply(k, silhouette_score)
+plot(k, type='b', avg_sil, xlab='Number of clusters', ylab='Average Silhouette Scores', frame=FALSE)
+# We observe that this way the optimal number of clusters seems to be 2!
+```  
+**Final suggestions**  
+```{r}
+# Following the exploration we conducted, in order to choose the most appropriate way to do the clustering, we have to take into consideration the results of all the methods used above. The reason lies in the fact that the more methods one explores the better picture of the situation he gets! Let’s sum up the methods used and what their overall results produced:
+# •	Most methods of the Hierarchical Clustering category indicate to use 3 clusters.
+# •	Kmeans suggests to use 2 clusters.
+# •	Model based recommends using 3 clusters.
+# Therefore, after taking into account all of the above, our final suggestion would be to use 3 groups in order to do the clustering!
+```
+
+
+
+
